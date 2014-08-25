@@ -154,11 +154,18 @@ class ChatPage(Page):
         if not text:
             return
         self.context.lock.acquire()
-        self.context.item.sendMessage(
-            text.encode(
-                encoding='UTF-8',
-                errors='strict')
-        )
+        try:
+            self.context.item.sendMessage(
+                text.encode(
+                    encoding='UTF-8',
+                    errors='strict')
+            )
+        except:
+            context = Context(self.context.loop)
+            login_page = LoginPage(None, context)
+            login_page.status.set_text(('error', 'Logout'))
+            context.loop.widget = login_page.page
+            context.loop.draw_screen()
         self.context.lock.release()
         self.edit.set_edit_text('')
         self.footer.focus_position = 0
