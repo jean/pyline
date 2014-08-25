@@ -25,8 +25,6 @@ palette = [
     ('r_others', 'black', 'light magenta')
 ]
 
-box_stack = []
-
 
 class Context:
 
@@ -34,6 +32,7 @@ class Context:
         self.loop = loop
         self.client = client
         self.lock = threading.Lock()
+        self.history = collections.deque(maxlen=100)
 
 
 class Page(object):
@@ -114,28 +113,12 @@ class TalkBox(urwid.Edit):
         self.context = context
 
     def keypress(self, size, key):
-        if key != 'enter':
+        if key == 'enter':
+            self.parent.sendMessage()
+            self.set_edit_text('')
+            self.parent.footer.focus_position = 0
+        else:
             return super(TalkBox, self).keypress(size, key)
-        text = self.get_edit_text()
-        if not text:
-            return
-        self.context.lock.acquire()
-        try:
-            self.context.item.sendMessage(
-                text.encode(
-                    encoding='UTF-8',
-                    errors='strict')
-            )
-        except:
-            context = Context(self.context.loop)
-            login_page = LoginPage(None, context)
-            login_page.status.set_text(('error', 'Logout'))
-            context.loop.widget = login_page.page
-            context.loop.draw_screen()
-
-        self.context.lock.release()
-        self.set_edit_text('')
-        self.parent.footer.focus_position = 0
 
 
 class ChatPage(Page):
@@ -148,13 +131,13 @@ class ChatPage(Page):
         self.pulling.daemon = True
         self.pulling.start()
 
-    @staticmethod
-    def on_send_clicked(self, button):
+    def sendMessage(self):
         text = self.edit.get_edit_text()
         if not text:
             return
         self.context.lock.acquire()
         try:
+            self.context.history.append(text)
             self.context.item.sendMessage(
                 text.encode(
                     encoding='UTF-8',
@@ -167,6 +150,11 @@ class ChatPage(Page):
             context.loop.widget = login_page.page
             context.loop.draw_screen()
         self.context.lock.release()
+
+
+    @staticmethod
+    def on_send_clicked(self, button):
+        self.sendMessage()
         self.edit.set_edit_text('')
         self.footer.focus_position = 0
 
