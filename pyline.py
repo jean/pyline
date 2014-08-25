@@ -93,7 +93,6 @@ class ChatPulling(threading.Thread):
                 self.chat_page.frame.contents['body'] = (
                     self.chat_page.gen_body(),
                     None)
-                self.context.lock.release()
             except:
                 self.is_stop = True
                 context = Context(self.context.loop)
@@ -102,6 +101,7 @@ class ChatPulling(threading.Thread):
                 context.loop.widget = login_page.page
                 context.loop.draw_screen()
 
+            self.context.lock.release()
             self.context.loop.draw_screen()
             time.sleep(1)
 
