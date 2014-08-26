@@ -169,9 +169,11 @@ class ChatPage(Page):
         for m in self.context.item.getRecentMessages(count=50):
             align = urwid.RIGHT
             color = 'self'
+            name = ""
             if m.sender:
                 align = urwid.LEFT
                 color = 'others'
+                name = m.sender.name + ": "
 
             text = m.text
             if m.contentType:
@@ -181,6 +183,7 @@ class ChatPage(Page):
                     text = "OTHER"
                 color = 'r_' + color
 
+            text = name +  text
             messages.append(urwid.Text((color, text), align))
         messages.reverse()
         body = urwid.ListBox(
