@@ -87,7 +87,6 @@ class ChatPulling(threading.Thread):
 
     def run(self):
         while not self.is_stop:
-            self.context.lock.acquire()
             try:
                 self.chat_page.frame.contents['body'] = (
                     self.chat_page.gen_body(),
@@ -98,9 +97,6 @@ class ChatPulling(threading.Thread):
                 login_page = LoginPage(None, context)
                 login_page.status.set_text(('error', 'Logout'))
                 context.loop.widget = login_page.page
-                context.loop.draw_screen()
-
-            self.context.lock.release()
             self.context.loop.draw_screen()
             time.sleep(1)
 
@@ -135,9 +131,9 @@ class ChatPage(Page):
         text = self.edit.get_edit_text()
         if not text:
             return
-        self.context.lock.acquire()
         try:
             self.context.history.append(text)
+            self.context.lock.acquire()
             self.context.item.sendMessage(
                 text.encode(
                     encoding='UTF-8',
@@ -166,7 +162,15 @@ class ChatPage(Page):
 
     def gen_body(self):
         messages = collections.deque(maxlen=50)
-        for m in self.context.item.getRecentMessages(count=50):
+        self.context.lock.acquire()
+        try:
+            recent = self.context.item.getRecentMessages(count=50)
+        except Exception as e:
+            self.context.lock.release()
+            raise e
+        self.context.lock.release()
+
+        for m in recent:
             align = urwid.RIGHT
             color = 'self'
             name = ""
@@ -340,10 +344,9 @@ class Verification(threading.Thread):
             json.dump(data, outfile)
 
     def run(self):
+        self.context.lock.acquire()
         try:
-            self.context.lock.acquire()
             self.context.client.continueLogin()
-            self.context.lock.release()
         except:
             if not self.is_cancel:
                 self.pin_page.parent.status.set_text(
@@ -353,6 +356,7 @@ class Verification(threading.Thread):
             if not self.is_cancel:
                 self.save_data()
                 self.pin_page.go_to_page(MainPage)
+        self.context.lock.release()
 
 
 class PinPage(Page):
@@ -404,13 +408,13 @@ class LoginPage(Page):
                 self.password.get_edit_text(),
                 com_name=socket.gethostname(),
                 delay=True)
-            self.context.lock.release()
         except:
             self.status.set_text(('error', "Failed to login"))
             self.context.loop.draw_screen()
         else:
             self.go_to_page(PinPage)
             self.child.verify()
+        self.context.lock.release()
 
     @staticmethod
     def get_uid():
