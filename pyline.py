@@ -175,7 +175,10 @@ class ChatPage(Page):
 
             text = m.text
             if m.contentType:
-                text = ContentType._VALUES_TO_NAMES[m.contentType]
+                try:
+                    text = ContentType._VALUES_TO_NAMES[m.contentType]
+                except:
+                    text = "OTHER"
                 color = 'r_' + color
 
             messages.append(urwid.Text((color, text), align))
