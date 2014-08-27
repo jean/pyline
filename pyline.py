@@ -26,6 +26,25 @@ palette = [
 ]
 
 
+class ScrollListBox(urwid.ListBox):
+
+    def mouse_event(self, size, event, button, col, row, focus):
+        if button == 4:
+            self._keypress_page_up(size)
+        elif button == 5:
+            self._keypress_page_down(size)
+
+        return super(
+            ScrollListBox,
+            self).mouse_event(
+            size,
+            event,
+            button,
+            col,
+            row,
+            focus)
+
+
 class Context:
 
     def __init__(self, loop=None, client=None):
@@ -196,7 +215,7 @@ class ChatPage(Page):
                     text = "OTHER"
                 color = 'r_' + color
 
-            text = name +  text
+            text = name + text
             messages.append(urwid.Text((color, text), align))
         messages.reverse()
         body = urwid.ListBox(
@@ -205,6 +224,7 @@ class ChatPage(Page):
             )
         )
         body.body.set_focus(len(messages) - 1)
+        body._selectable = False
         return body
 
     def gen_page(self):
@@ -290,7 +310,7 @@ class FriendsPage(Page):
 
         return self.gen_top(
             self.gen_padding(
-                urwid.ListBox(
+                ScrollListBox(
                     urwid.SimpleFocusListWalker(body)
                 )
             )
@@ -419,7 +439,11 @@ class LoginPage(Page):
             with self.context.lock:
                 client = LineClient(authToken=authToken)
             context = Context(client=client)
-            context.loop = urwid.MainLoop(MainPage(None, context).page, palette)
+            context.loop = urwid.MainLoop(
+                MainPage(
+                    None,
+                    context).page,
+                palette)
             context.loop.run()
         except:
             try:
