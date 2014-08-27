@@ -141,6 +141,8 @@ class TalkBox(urwid.Edit):
             self.parent.sendMessage()
             self.set_edit_text('')
             self.parent.footer.focus_position = 0
+        if key == 'ctrl u':
+            self.set_edit_text('')
         else:
             return super(TalkBox, self).keypress(size, key)
 
