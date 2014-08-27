@@ -6,7 +6,7 @@ import json
 
 import urwid
 from line import LineClient
-from curve.ttypes import ContentType
+from curve.ttypes import ContentType, TalkException
 
 palette = [
     ('line', 'light green', 'black'),
@@ -88,17 +88,26 @@ class ChatPulling(threading.Thread):
     def run(self):
         while not self.is_stop:
             try:
-                self.chat_page.frame.contents['body'] = (
-                    self.chat_page.gen_body(),
-                    None)
-            except:
+                body = self.chat_page.gen_body()
+                if body:
+                    self.chat_page.frame.contents['body'] = (body, None)
+            except TalkException as e:
                 self.is_stop = True
                 context = Context(self.context.loop)
                 login_page = LoginPage(None, context)
-                login_page.status.set_text(('error', 'Logout'))
+                login_page.status.set_text(('error', e.reason))
                 context.loop.widget = login_page.page
-            self.context.loop.draw_screen()
-            time.sleep(1)
+                context.loop.draw_screen()
+            except Exception as e:
+                self.is_stop = True
+                context = Context(self.context.loop)
+                login_page = LoginPage(None, context)
+                login_page.status.set_text(('error', e.message))
+                context.loop.widget = login_page.page
+                context.loop.draw_screen()
+            else:
+                self.context.loop.draw_screen()
+                time.sleep(1)
 
 
 class TalkBox(urwid.Edit):
@@ -133,20 +142,25 @@ class ChatPage(Page):
             return
         try:
             self.context.history.append(text)
-            self.context.lock.acquire()
-            self.context.item.sendMessage(
-                text.encode(
-                    encoding='UTF-8',
-                    errors='strict')
-            )
-        except:
+            with self.context.lock:
+                self.context.item.sendMessage(
+                    text.encode(
+                        encoding='UTF-8',
+                        errors='strict')
+                )
+            self.context.loop.draw_screen()
+        except TalkException as e:
             context = Context(self.context.loop)
             login_page = LoginPage(None, context)
-            login_page.status.set_text(('error', 'Logout'))
+            login_page.status.set_text(('error', e.reason))
             context.loop.widget = login_page.page
             context.loop.draw_screen()
-        self.context.lock.release()
-
+        except Exception as e:
+            context = Context(self.context.loop)
+            login_page = LoginPage(None, context)
+            login_page.status.set_text(('error', e.message))
+            context.loop.widget = login_page.page
+            context.loop.draw_screen()
 
     @staticmethod
     def on_send_clicked(self, button):
@@ -162,13 +176,8 @@ class ChatPage(Page):
 
     def gen_body(self):
         messages = collections.deque(maxlen=50)
-        self.context.lock.acquire()
-        try:
+        with self.context.lock:
             recent = self.context.item.getRecentMessages(count=50)
-        except Exception as e:
-            self.context.lock.release()
-            raise e
-        self.context.lock.release()
 
         for m in recent:
             align = urwid.RIGHT
@@ -344,19 +353,23 @@ class Verification(threading.Thread):
             json.dump(data, outfile)
 
     def run(self):
-        self.context.lock.acquire()
         try:
-            self.context.client.continueLogin()
-        except:
+            with self.context.lock:
+                self.context.client.continueLogin()
+        except TalkException as e:
             if not self.is_cancel:
                 self.pin_page.parent.status.set_text(
-                    ('error', "Failed to login"))
+                    ('error', e.reason))
+                self.pin_page.go_back_page()
+        except Exception as e:
+            if not self.is_cancel:
+                self.pin_page.parent.status.set_text(
+                    ('error', e.message))
                 self.pin_page.go_back_page()
         else:
             if not self.is_cancel:
                 self.save_data()
                 self.pin_page.go_to_page(MainPage)
-        self.context.lock.release()
 
 
 class PinPage(Page):
@@ -401,20 +414,30 @@ class LoginPage(Page):
     def on_login_clicked(self, button):
         self.status.set_text(('info', "Login..."))
         self.context.loop.draw_screen()
+        authToken = get_authToken()
         try:
-            self.context.lock.acquire()
-            self.context.client = LineClient(
-                self.uid.get_edit_text(),
-                self.password.get_edit_text(),
-                com_name=socket.gethostname(),
-                delay=True)
+            with self.context.lock:
+                client = LineClient(authToken=authToken)
+            context = Context(client=client)
+            context.loop = urwid.MainLoop(MainPage(None, context).page, palette)
+            context.loop.run()
         except:
-            self.status.set_text(('error', "Failed to login"))
-            self.context.loop.draw_screen()
-        else:
-            self.go_to_page(PinPage)
-            self.child.verify()
-        self.context.lock.release()
+            try:
+                with self.context.lock:
+                    self.context.client = LineClient(
+                        self.uid.get_edit_text(),
+                        self.password.get_edit_text(),
+                        com_name=socket.gethostname(),
+                        delay=True)
+            except TalkException as e:
+                self.status.set_text(('error', e.reason))
+                self.context.loop.draw_screen()
+            except Exception as e:
+                self.status.set_text(('error', e.message))
+                self.context.loop.draw_screen()
+            else:
+                self.go_to_page(PinPage)
+                self.child.verify()
 
     @staticmethod
     def get_uid():
